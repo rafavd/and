@@ -1,4 +1,4 @@
-name: Appetize Android Bot Headless
+name: Appetize Android Bot Headless (Token direto)
 
 on:
   push:
@@ -9,21 +9,18 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      APPETIZE_KEY: "tok_j5qqrpvbvr5zureqtco7e22z54" # sua chave Appetize.io
+      APPETIZE_KEY: "tok_j5qqrpvbvr5zureqtco7e22z54"  # token direto no código
+      APK_URL: "https://github.com/appium/android-apidemos/releases/download/v3.1.0/ApiDemos-debug.apk"
       APP_PACKAGE: "io.appium.android.apis"
 
     steps:
-      # 1️⃣ Clonar repositório
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2️⃣ Baixar APK de exemplo (ApiDemos)
-      - name: Download Example APK
-        run: |
-          wget https://github.com/appium/android-apidemos/releases/download/v3.1.0/ApiDemos-debug.apk -O ./ApiDemos-debug.apk
+      - name: Download APK
+        run: wget $APK_URL -O ./ApiDemos-debug.apk
 
-      # 3️⃣ Upload APK para Appetize.io
-      - name: Upload APK to Appetize
+      - name: Upload APK
         id: upload
         run: |
           RESPONSE=$(curl -s -F "file=@./ApiDemos-debug.apk" \
@@ -32,19 +29,23 @@ jobs:
               https://api.appetize.io/v1/upload)
           echo "response=$RESPONSE" >> $GITHUB_OUTPUT
 
-      # 4️⃣ Extrair SESSION_ID
-      - name: Get Session ID
+      - name: Create Appetize Session
         id: session
         run: |
-          SESSION_ID=$(echo "${{ steps.upload.outputs.response }}" | jq -r '.data[0].uuid')
+          APP_ID=$(echo "${{ steps.upload.outputs.response }}" | jq -r '.data[0].uuid')
+          SESSION=$(curl -s -X POST "https://api.appetize.io/v1/sessions" \
+              -H "Authorization: Bearer $APPETIZE_KEY" \
+              -d "{\"appId\":\"$APP_ID\"}")
+          SESSION_ID=$(echo "$SESSION" | jq -r '.uuid')
           echo "SESSION_ID=$SESSION_ID" >> $GITHUB_ENV
 
-      # 5️⃣ Interações automáticas (exemplo seguro)
-      - name: Send Commands to Appetize
+      - name: Wait for App Launch
+        run: sleep 15
+
+      - name: Interact with App
         run: |
           random_sleep() { sleep $(( (RANDOM % 5) + 2 )); }
 
-          # Tap em coordenadas (exemplo)
           curl -X POST "https://api.appetize.io/v1/sessions/$SESSION_ID/touch" \
                -H "Authorization: Bearer $APPETIZE_KEY" \
                -d '{"x":300,"y":800,"type":"down"}'
@@ -53,20 +54,17 @@ jobs:
                -d '{"x":300,"y":800,"type":"up"}'
           random_sleep
 
-          # Swipe exemplo
           curl -X POST "https://api.appetize.io/v1/sessions/$SESSION_ID/swipe" \
                -H "Authorization: Bearer $APPETIZE_KEY" \
                -d '{"startX":300,"startY":1200,"endX":300,"endY":400,"duration":500}'
           random_sleep
 
-      # 6️⃣ Captura de screenshot
       - name: Capture Screenshot
         run: |
           curl -X GET "https://api.appetize.io/v1/sessions/$SESSION_ID/screenshot" \
                -H "Authorization: Bearer $APPETIZE_KEY" \
                -o screen1.png
 
-      # 7️⃣ Upload artifacts
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
