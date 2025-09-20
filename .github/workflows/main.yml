@@ -12,7 +12,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      # 1️⃣ Checar Docker (já pré-instalado no runner)
+      # 1️⃣ Verificar Docker (já pré-instalado no runner)
       - name: Check Docker
         run: |
           docker --version
@@ -21,12 +21,12 @@ jobs:
       # 2️⃣ Rodar container Android com VNC e ADB
       - name: Start Android Docker
         run: |
-          docker pull budtmo/docker-android-x86-11.0
+          docker pull budtmo/docker-android:emulator_11.0
           docker run -d --name android-emulator \
             -p 6080:6080 -p 5555:5555 \
             -e DEVICE="pixel" \
             -e EMULATOR_ARGS="-no-window -no-audio -no-boot-anim" \
-            budtmo/docker-android-x86-11.0
+            budtmo/docker-android:emulator_11.0
 
           echo "Esperando 60s para o emulador iniciar..."
           sleep 60
