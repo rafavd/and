@@ -28,15 +28,18 @@ jobs:
             -e EMULATOR_ARGS="-no-window -no-audio -no-boot-anim" \
             budtmo/docker-android:emulator_11.0
 
-      # 3️⃣ Esperar o emulador ficar online
+      # 3️⃣ Esperar o emulador ficar pronto e conectar via TCP
       - name: Wait for emulator
         run: |
-          echo "Aguardando emulador iniciar..."
-          until docker exec android-emulator adb devices | grep emulator; do
+          echo "Iniciando servidor ADB..."
+          docker exec android-emulator adb start-server
+          echo "Aguardando emulador conectar..."
+          until docker exec android-emulator adb connect 127.0.0.1:5555 | grep -q 'connected'; do
             echo "Emulador ainda não pronto..."
             sleep 5
           done
-          echo "Emulador pronto!"
+          echo "Emulador conectado!"
+          docker exec android-emulator adb devices
 
       # 4️⃣ Baixar APK
       - name: Download APK
