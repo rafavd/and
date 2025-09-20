@@ -1,71 +1,53 @@
-name: Appetize Android Bot Headless v2
+name: Android Headless CI
 
 on:
   push:
     branches: [main]
 
 jobs:
-  appetize-bot:
+  android-emulator:
     runs-on: ubuntu-latest
 
     env:
-      APPETIZE_KEY: "tok_j5qqrpvbvr5zureqtco7e22z54"  # token válido só para criar sessão
-      APP_ID: "b_62au3skfbffay5jcys3ymiru2e"  # appId do APK já carregado manualmente
-      APP_PACKAGE: "io.appium.android.apis"
+      ANDROID_HOME: /usr/local/android-sdk
+      PATH: ${{ env.ANDROID_HOME }}/cmdline-tools/latest/bin:${{ env.ANDROID_HOME }}/platform-tools:${{ env.PATH }}
+      EMULATOR_NAME: test_emulator
+      DEVICE: "pixel"
+      API_LEVEL: 33
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v3
 
-      # 1️⃣ Criar sessão diretamente
-      - name: Create Appetize Session
-        id: session
+      # 1️⃣ Instalar Android SDK
+      - name: Setup Android SDK
         run: |
-          SESSION=$(curl -s -X POST "https://api.appetize.io/v1/sessions" \
-              -H "Authorization: Bearer $APPETIZE_KEY" \
-              -d "{\"appId\":\"$APP_ID\"}")
-          SESSION_ID=$(echo "$SESSION" | jq -r '.uuid // empty')
-          if [ -z "$SESSION_ID" ]; then
-            echo "❌ Falha ao criar sessão Appetize. Resposta: $SESSION"
-            exit 1
-          fi
-          echo "SESSION_ID=$SESSION_ID" >> $GITHUB_ENV
-          echo "✅ Sessão criada com sucesso: $SESSION_ID"
+          sudo mkdir -p $ANDROID_HOME
+          sudo chown $USER:$USER $ANDROID_HOME
+          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
+          unzip cmdline-tools.zip -d $ANDROID_HOME
+          mv $ANDROID_HOME/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          yes | sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "platforms;android-$API_LEVEL" "system-images;android-$API_LEVEL;google_apis;x86_64" "emulator"
 
-      # 2️⃣ Esperar o app iniciar
-      - name: Wait for App Launch
-        run: sleep 15
-
-      # 3️⃣ Interações automáticas
-      - name: Interact with App
+      # 2️⃣ Criar e iniciar o emulador headless
+      - name: Create & Start Emulator
         run: |
-          random_sleep() { sleep $(( (RANDOM % 5) + 2 )); }
+          echo "no" | avdmanager create avd -n $EMULATOR_NAME -k "system-images;android-$API_LEVEL;google_apis;x86_64" -d $DEVICE --force
+          $ANDROID_HOME/emulator/emulator -avd $EMULATOR_NAME -no-window -no-audio -no-boot-anim &
+          # Esperar o emulador inicializar
+          adb wait-for-device
+          boot_completed=""
+          until [[ "$boot_completed" == "1" ]]; do
+            boot_completed=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            sleep 5
+          done
 
-          # Tap exemplo
-          curl -X POST "https://api.appetize.io/v1/sessions/$SESSION_ID/touch" \
-               -H "Authorization: Bearer $APPETIZE_KEY" \
-               -d '{"x":300,"y":800,"type":"down"}'
-          curl -X POST "https://api.appetize.io/v1/sessions/$SESSION_ID/touch" \
-               -H "Authorization: Bearer $APPETIZE_KEY" \
-               -d '{"x":300,"y":800,"type":"up"}'
-          random_sleep
-
-          # Swipe exemplo
-          curl -X POST "https://api.appetize.io/v1/sessions/$SESSION_ID/swipe" \
-               -H "Authorization: Bearer $APPETIZE_KEY" \
-               -d '{"startX":300,"startY":1200,"endX":300,"endY":400,"duration":500}'
-          random_sleep
-
-      # 4️⃣ Captura de screenshot
-      - name: Capture Screenshot
+      # 3️⃣ Instalar APK
+      - name: Install APK
         run: |
-          curl -X GET "https://api.appetize.io/v1/sessions/$SESSION_ID/screenshot" \
-               -H "Authorization: Bearer $APPETIZE_KEY" \
-               -o screen1.png
+          wget https://github.com/appium/android-apidemos/releases/download/v3.1.0/ApiDemos-debug.apk -O ApiDemos-debug.apk
+          adb install -r ApiDemos-debug.apk
 
-      # 5️⃣ Upload artifacts
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: appetize-artifacts
-          path: screen1.png
+      # 4️⃣ Abrir o app
+      - name: Launch App
+        run: adb shell am
