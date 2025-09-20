@@ -12,12 +12,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      # 1️⃣ Instalar Docker (se ainda não estiver)
-      - name: Setup Docker
+      # 1️⃣ Checar Docker (já pré-instalado no runner)
+      - name: Check Docker
         run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io
           docker --version
+          docker info
 
       # 2️⃣ Rodar container Android com VNC e ADB
       - name: Start Android Docker
@@ -29,15 +28,15 @@ jobs:
             -e EMULATOR_ARGS="-no-window -no-audio -no-boot-anim" \
             budtmo/docker-android-x86-11.0
 
-          # Esperar o emulador iniciar
           echo "Esperando 60s para o emulador iniciar..."
           sleep 60
 
-      # 3️⃣ Instalar APK
+      # 3️⃣ Baixar e instalar APK
+      - name: Download APK
+        run: wget https://github.com/appium/android-apidemos/releases/download/v3.1.0/ApiDemos-debug.apk -O ApiDemos-debug.apk
+
       - name: Install APK
-        run: |
-          wget https://github.com/appium/android-apidemos/releases/download/v3.1.0/ApiDemos-debug.apk -O ApiDemos-debug.apk
-          docker exec android-emulator adb install -r /github/workspace/ApiDemos-debug.apk
+        run: docker exec android-emulator adb install -r /github/workspace/ApiDemos-debug.apk
 
       # 4️⃣ Abrir o app
       - name: Launch App
