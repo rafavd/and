@@ -1,0 +1,66 @@
+name: Android Headless Test with ApiDemos
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  android-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl lsb-release wget unzip squashfs-tools git python3 adb
+
+      - name: Install Waydroid
+        run: |
+          sudo curl -sSL https://repo.waydro.id | sudo bash
+          sudo apt-get install -y waydroid
+
+      - name: Initialize Waydroid container
+        run: |
+          sudo waydroid init
+          sudo waydroid container start
+          sleep 10
+
+      - name: Connect ADB
+        run: |
+          adb connect 127.0.0.1:5555
+          adb wait-for-device
+
+      - name: Download ApiDemos APK
+        run: |
+          wget https://github.com/appium/android-apidemos/releases/download/v3.1.0/ApiDemos-debug.apk -O ./ApiDemos-debug.apk
+
+      - name: Install APK
+        run: adb install ./ApiDemos-debug.apk
+
+      - name: Launch App
+        run: adb shell am start -n io.appium.android.apis/.ApiDemos
+
+      - name: Interact with App
+        run: |
+          adb shell input tap 300 800
+          adb shell input swipe 300 1200 300 400 500
+          adb shell input keyevent 66
+
+      - name: Capture Screenshot
+        run: |
+          adb shell screencap -p /sdcard/screen1.png
+          adb pull /sdcard/screen1.png ./screen1.png
+
+      - name: Capture Logcat
+        run: adb logcat -d > logcat.txt
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: android-artifacts
+          path: |
+            screen1.png
+            logcat.txt
