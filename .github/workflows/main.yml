@@ -1,4 +1,4 @@
-name: Appetize Android Bot Headless (Validated)
+name: Appetize Android Bot Headless v2
 
 on:
   push:
@@ -9,34 +9,15 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      APPETIZE_KEY: "tok_j5qqrpvbvr5zureqtco7e22z54"  # token direto
-      APK_URL: "https://github.com/appium/android-apidemos/releases/download/v3.1.0/ApiDemos-debug.apk"
+      APPETIZE_KEY: "tok_j5qqrpvbvr5zureqtco7e22z54"  # token válido só para criar sessão
+      APP_ID: "b_62au3skfbffay5jcys3ymiru2e"  # appId do APK já carregado manualmente
       APP_PACKAGE: "io.appium.android.apis"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Download APK
-        run: wget $APK_URL -O ./ApiDemos-debug.apk
-
-      - name: Upload APK to Appetize
-        id: upload
-        run: |
-          RESPONSE=$(curl -s -F "file=@./ApiDemos-debug.apk" \
-              -F "platform=android" \
-              -H "Authorization: Bearer $APPETIZE_KEY" \
-              https://api.appetize.io/v1/upload)
-          echo "Upload response: $RESPONSE"
-
-          # Validar se upload deu certo
-          SUCCESS=$(echo "$RESPONSE" | jq -r '.data[0].uuid // empty')
-          if [ -z "$SUCCESS" ]; then
-            echo "❌ Upload falhou. Verifique seu APPETIZE_KEY ou URL."
-            exit 1
-          fi
-          echo "APP_ID=$SUCCESS" >> $GITHUB_ENV
-
+      # 1️⃣ Criar sessão diretamente
       - name: Create Appetize Session
         id: session
         run: |
@@ -51,9 +32,11 @@ jobs:
           echo "SESSION_ID=$SESSION_ID" >> $GITHUB_ENV
           echo "✅ Sessão criada com sucesso: $SESSION_ID"
 
+      # 2️⃣ Esperar o app iniciar
       - name: Wait for App Launch
         run: sleep 15
 
+      # 3️⃣ Interações automáticas
       - name: Interact with App
         run: |
           random_sleep() { sleep $(( (RANDOM % 5) + 2 )); }
@@ -73,12 +56,14 @@ jobs:
                -d '{"startX":300,"startY":1200,"endX":300,"endY":400,"duration":500}'
           random_sleep
 
+      # 4️⃣ Captura de screenshot
       - name: Capture Screenshot
         run: |
           curl -X GET "https://api.appetize.io/v1/sessions/$SESSION_ID/screenshot" \
                -H "Authorization: Bearer $APPETIZE_KEY" \
                -o screen1.png
 
+      # 5️⃣ Upload artifacts
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
