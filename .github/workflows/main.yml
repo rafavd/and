@@ -1,60 +1,51 @@
-name: Android Headless CI
+name: Android Emulator in Docker
 
 on:
   push:
     branches: [main]
 
 jobs:
-  android-emulator:
+  android-docker:
     runs-on: ubuntu-latest
 
-    env:
-      ANDROID_HOME: /usr/local/android-sdk
-      PATH: /usr/local/android-sdk/cmdline-tools/latest/bin:/usr/local/android-sdk/platform-tools:${{ env.PATH }}
-      EMULATOR_NAME: test_emulator
-      DEVICE: "pixel"
-      API_LEVEL: 33
-
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v3
 
-      # 1️⃣ Instalar Android SDK e ferramentas
-      - name: Setup Android SDK
+      # 1️⃣ Instalar Docker (se ainda não estiver)
+      - name: Setup Docker
         run: |
-          sudo mkdir -p $ANDROID_HOME
-          sudo chown $USER:$USER $ANDROID_HOME
-          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-          unzip cmdline-tools.zip -d $ANDROID_HOME
-          mv $ANDROID_HOME/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "platforms;android-$API_LEVEL" "system-images;android-$API_LEVEL;google_apis;x86_64" "emulator"
+          sudo apt-get update
+          sudo apt-get install -y docker.io
+          docker --version
 
-      # 2️⃣ Criar e iniciar emulador headless
-      - name: Create & Start Emulator
+      # 2️⃣ Rodar container Android com VNC e ADB
+      - name: Start Android Docker
         run: |
-          echo "no" | avdmanager create avd -n $EMULATOR_NAME -k "system-images;android-$API_LEVEL;google_apis;x86_64" -d $DEVICE --force
-          $ANDROID_HOME/emulator/emulator -avd $EMULATOR_NAME -no-window -no-audio -no-boot-anim &
-          adb wait-for-device
-          boot_completed=""
-          until [[ "$boot_completed" == "1" ]]; do
-            boot_completed=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-            sleep 5
-          done
+          docker pull budtmo/docker-android-x86-11.0
+          docker run -d --name android-emulator \
+            -p 6080:6080 -p 5555:5555 \
+            -e DEVICE="pixel" \
+            -e EMULATOR_ARGS="-no-window -no-audio -no-boot-anim" \
+            budtmo/docker-android-x86-11.0
 
-      # 3️⃣ Baixar e instalar APK
-      - name: Download APK
-        run: wget https://github.com/appium/android-apidemos/releases/download/v3.1.0/ApiDemos-debug.apk -O ApiDemos-debug.apk
+          # Esperar o emulador iniciar
+          echo "Esperando 60s para o emulador iniciar..."
+          sleep 60
 
+      # 3️⃣ Instalar APK
       - name: Install APK
-        run: adb install -r ApiDemos-debug.apk
+        run: |
+          wget https://github.com/appium/android-apidemos/releases/download/v3.1.0/ApiDemos-debug.apk -O ApiDemos-debug.apk
+          docker exec android-emulator adb install -r /github/workspace/ApiDemos-debug.apk
 
       # 4️⃣ Abrir o app
       - name: Launch App
-        run: adb shell am start -n io.appium.android.apis/.ApiDemos
+        run: docker exec android-emulator adb shell am start -n io.appium.android.apis/.ApiDemos
 
       # 5️⃣ Tirar screenshot
       - name: Capture Screenshot
-        run: adb exec-out screencap -p > screen1.png
+        run: docker exec android-emulator adb exec-out screencap -p > screen1.png
 
       # 6️⃣ Upload screenshot como artifact
       - name: Upload Artifacts
