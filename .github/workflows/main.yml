@@ -12,13 +12,13 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      # 1️⃣ Verificar Docker (já pré-instalado no runner)
+      # 1️⃣ Verificar Docker
       - name: Check Docker
         run: |
           docker --version
           docker info
 
-      # 2️⃣ Rodar container Android com VNC e ADB
+      # 2️⃣ Rodar container Android
       - name: Start Android Docker
         run: |
           docker pull budtmo/docker-android:emulator_11.0
@@ -28,27 +28,49 @@ jobs:
             -e EMULATOR_ARGS="-no-window -no-audio -no-boot-anim" \
             budtmo/docker-android:emulator_11.0
 
-          echo "Esperando 60s para o emulador iniciar..."
-          sleep 60
+      # 3️⃣ Esperar o emulador ficar online
+      - name: Wait for emulator
+        run: |
+          echo "Aguardando emulador iniciar..."
+          until docker exec android-emulator adb devices | grep emulator; do
+            echo "Emulador ainda não pronto..."
+            sleep 5
+          done
+          echo "Emulador pronto!"
 
-      # 3️⃣ Baixar e instalar APK
+      # 4️⃣ Baixar APK
       - name: Download APK
         run: wget https://github.com/appium/android-apidemos/releases/download/v3.1.0/ApiDemos-debug.apk -O ApiDemos-debug.apk
 
+      # 5️⃣ Instalar APK
       - name: Install APK
         run: docker exec android-emulator adb install -r /github/workspace/ApiDemos-debug.apk
 
-      # 4️⃣ Abrir o app
+      # 6️⃣ Abrir o app
       - name: Launch App
         run: docker exec android-emulator adb shell am start -n io.appium.android.apis/.ApiDemos
 
-      # 5️⃣ Tirar screenshot
-      - name: Capture Screenshot
-        run: docker exec android-emulator adb exec-out screencap -p > screen1.png
+      # 7️⃣ Interações automáticas (taps e swipes)
+      - name: Automate Interaction
+        run: |
+          # Tap em coordenadas x=300 y=800
+          docker exec android-emulator adb shell input tap 300 800
+          # Swipe da posição (300,1200) para (300,400) em 500ms
+          docker exec android-emulator adb shell input swipe 300 1200 300 400 500
+          sleep 2
+          docker exec android-emulator adb shell input tap 500 500
 
-      # 6️⃣ Upload screenshot como artifact
+      # 8️⃣ Captura múltiplas screenshots
+      - name: Capture Screenshots
+        run: |
+          for i in 1 2 3; do
+            docker exec android-emulator adb exec-out screencap -p > screen$i.png
+            sleep 2
+          done
+
+      # 9️⃣ Upload screenshots
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: android-screenshots
-          path: screen1.png
+          path: screen*.png
