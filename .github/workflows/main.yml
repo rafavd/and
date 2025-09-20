@@ -1,84 +1,56 @@
-name: Headless Android Safe Bot Example
+name: Appetize Android Headless Test
 
 on:
   push:
     branches: [main]
 
 jobs:
-  waydroid-safe-example:
+  appetize-test:
     runs-on: ubuntu-latest
 
+    env:
+      APPETIZE_KEY: "tok_j5qqrpvbvr5zureqtco7e22z54" # coloque sua chave Appetize aqui
+      APP_PACKAGE: "io.appium.android.apis"
+
     steps:
-      # 1️⃣ Clonar repositório
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      # 2️⃣ Instalar dependências do Waydroid
-      - name: Setup Waydroid dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y curl lsb-release wget unzip squashfs-tools git python3 adb
-
-      # 3️⃣ Instalar Waydroid
-      - name: Install Waydroid
-        run: |
-          sudo curl -sSL https://repo.waydro.id | sudo bash
-          sudo apt-get install -y waydroid
-
-      # 4️⃣ Inicializar container Waydroid
-      - name: Initialize Waydroid
-        run: |
-          sudo waydroid init
-          sudo waydroid container start
-          sleep 10
-
-      # 5️⃣ Conectar via ADB
-      - name: Connect ADB
-        run: |
-          adb connect 127.0.0.1:5555
-          adb wait-for-device
-
-      # 6️⃣ Baixar APK de exemplo (ApiDemos)
+      # 1️⃣ Baixar APK de exemplo (ApiDemos)
       - name: Download Example APK
         run: |
           wget https://github.com/appium/android-apidemos/releases/download/v3.1.0/ApiDemos-debug.apk -O ./ApiDemos-debug.apk
 
-      # 7️⃣ Instalar APK
-      - name: Install Example APK
-        run: adb install ./ApiDemos-debug.apk
-
-      # 8️⃣ Abrir app (MainActivity de exemplo)
-      - name: Launch Example App
-        run: adb shell am start -n io.appium.android.apis/.ApiDemos
-
-      # 9️⃣ Interações automáticas seguras
-      - name: Interact Safely
+      # 2️⃣ Upload APK para Appetize (opcional se já estiver online)
+      - name: Upload APK to Appetize
         run: |
-          random_sleep() { sleep $(( (RANDOM % 5) + 2 )); }
-          for i in {1..3}; do
-            adb shell input tap 300 800
-            random_sleep
-            adb shell input swipe 300 1200 300 400 500
-            random_sleep
-            adb shell input keyevent 66
-            random_sleep
-          done
+          curl -F "file=@./ApiDemos-debug.apk" \
+               -F "platform=android" \
+               -H "Authorization: Bearer $APPETIZE_KEY" \
+               https://api.appetize.io/v1/upload
 
-      # 🔟 Capturar screenshot
+      # 3️⃣ Interações via API
+      - name: Send Commands to Appetize
+        run: |
+          # Tap simulando clique na tela
+          curl -X POST "https://api.appetize.io/v1/sessions/<SESSION_ID>/touch" \
+               -H "Authorization: Bearer $APPETIZE_KEY" \
+               -d '{"x":300,"y":800,"type":"down"}'
+          sleep 2
+          curl -X POST "https://api.appetize.io/v1/sessions/<SESSION_ID>/touch" \
+               -H "Authorization: Bearer $APPETIZE_KEY" \
+               -d '{"x":300,"y":800,"type":"up"}'
+
+      # 4️⃣ Captura de screenshot
       - name: Capture Screenshot
         run: |
-          adb shell screencap -p /sdcard/screen1.png
-          adb pull /sdcard/screen1.png ./screen1.png
+          curl -X GET "https://api.appetize.io/v1/sessions/<SESSION_ID>/screenshot" \
+               -H "Authorization: Bearer $APPETIZE_KEY" \
+               -o screen1.png
 
-      # 1️⃣1️⃣ Capturar logs
-      - name: Capture Logcat
-        run: adb logcat -d > logcat.txt
-
-      # 1️⃣2️⃣ Salvar artefatos (atualizado para v4)
+      # 5️⃣ Upload artifacts
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: safe-waydroid-artifacts
-          path: |
-            screen1.png
-            logcat.txt
+          name: appetize-artifacts
+          path: screen1.png
